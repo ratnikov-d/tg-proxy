@@ -1,59 +1,93 @@
 # tg-proxy
 
-Telegram WEB proxy: `tproxy-web` (telegramdesktop/tproxy-server) + MTProxy backend в Docker.
+Telegram WEB-прокси в Docker: сайт-заглушка + релей + MTProxy-бэкенд.
 
 ```
-Интернет :443 → Traefik (freedom.lt.ruii.ru) → tproxy-web → telemt:443
+Клиент → Traefik (443, HTTPS host) → tproxy-web (сайт + релей) → telemt (MTProto, classic)
 ```
 
-`tproxy-web` отдаёт сайт-заглушку и WebView-карьер, релеит MTProto-стримы в бэкенд.
-FakeTLS/HTTPS снимает `tproxy-web`, поэтому бэкенд работает в **classic**-режиме
-(16-байтовый секрет), как официальный MTProxy.
+Клиент подключается к домену по HTTPS (`t.me/webproxy`-ссылка), релей снимает
+TLS-транспорт и передаёт MTProto-потоки в бэкенд. Бэкенд работает в classic-режиме
+(16-байтовый секрет), поэтому ссылки совместимы с обычным MTProxy-секретом.
 
 ## Состав
 
-| Файл | Назначение |
+| Файл | Что |
 |---|---|
-| `compose.yaml` | стек: `tproxy-web` + `telemt`, сеть `shared-net` |
-| `start.sh` | рендер `config.json`/`profiles.json`, socat 8443 → `mtproxy:443` |
-| `public/index.html` | сайт-заглушка |
-| `Dockerfile` | сборка `tproxy-web` из telegramdesktop/tproxy-server |
+| `compose.yaml` | стек: `tproxy-web` + `telemt`, внешняя сеть `shared-net` |
+| `start.sh` | рендер `config.json`/`profiles.json`, socat `127.0.0.1:8443 → mtproxy:443` |
+| `Dockerfile` | образ `tproxy-web` (Go-релей + socat) |
+| `config.template.json`, `profiles.template.json` | шаблоны конфигов релея |
+| `public/index.html` | сайт-заглушка на домене |
+| `.env.example` | шаблон `.env` |
 
-## Бэкенд
+## Секреты
 
-`ghcr.io/telemt/telemt:3.5.17` (Rust) вместо официального `telegrammessenger/proxy`
-(образ 2020 года, 7–8% CPU на 1 vCPU в простое). telemt в classic-режиме даёт
-0.5–1% при том же протоколе и том же секрете — клиентские ссылки не меняются.
-
-- у контейнера `telemt` network alias `mtproxy`, потому что `start.sh` жёстко
-  ходит в `mtproxy:443`; отдельный контейнер `mtproxy` больше не нужен;
-- конфиг бэкенда рендерится самим Compose из `MTP_SECRET` (`configs.content`):
-  в git секрета нет, а bind-mount файла ломается при деплое из git на другом
-  хосте (`bind source path does not exist`); состояние — tmpfs `/run/telemt`;
-- healthcheck использует Control API `127.0.0.1:9091` внутри контейнера;
-- TLS/secure режимы выключены: FakeTLS уже делает `tproxy-web`.
-
-## Деплой
-
-Нужен только `.env` рядом с `compose.yaml`:
+Всё, что нужно хосту, — `.env` рядом с `compose.yaml`:
 
 ```
 MTP_SECRET=<32 hex>
-PUBLIC_HOSTNAME=freedom.example.com
+PUBLIC_HOSTNAME=<домен>
 ```
 
+Секрет нигде в git не хранится: конфиг telemt рендерится Compose из `MTP_SECRET`
+(`configs.content`), а tproxy-web получает его как переменную окружения.
+
+## Бэкенд
+
+`ghcr.io/telemt/telemt:3.5.17` (Rust), режим `classic`, TLS/secure выключены —
+TLS-транспорт делает релей.
+
+- у контейнера alias `mtproxy` в сети `shared-net`: `start.sh` релея ходит в
+  `mtproxy:443`, поэтому отдельный контейнер `mtproxy` не нужен;
+- конфиг — `configs.content`, состояние — tmpfs `/run/telemt`, томов нет;
+- healthcheck — `telemt healthcheck ... --mode liveness`, использует Control API
+  на `127.0.0.1:9091` внутри контейнера;
+- `read_only` выключен: Compose не умеет `content`-configs в read-only контейнере.
+
+## Деплой
+
 ```bash
+cp .env.example .env    # вписать MTP_SECRET и PUBLIC_HOSTNAME
 docker compose up -d
 ```
+
+Требования хоста: Docker + Compose, внешняя сеть `shared-net`, Traefik с
+`certresolver=letsencrypt` и метками `traefik.http.routers.*` (см. `compose.yaml`).
 
 Клиентская ссылка (не меняется при смене бэкенда, если секрет тот же):
 
 ```
-https://t.me/webproxy?server=<PUBLIC_HOSTNAME>&secret=<32 hex>
+https://t.me/webproxy?server=<PUBLIC_HOSTNAME>&secret=<MTP_SECRET>
 ```
+
+## Проверка после деплоя
+
+```bash
+docker compose ps                     # tproxy-web и telemt — healthy
+curl -fsS -o /dev/null -w '%{http_code}\n' https://$PUBLIC_HOSTNAME/
+docker logs telemt --tail 20          # «RPC handshake OK» = бэкенд видит DC Telegram
+docker exec tproxy-web sh -c 'socat -u /dev/null TCP:mtproxy:443 && echo port_open'
+```
+
+## Обновление
+
+```bash
+git pull
+docker compose up -d
+```
+
+## Если что-то не завелось
+
+| Симптом | Причина |
+|---|---|
+| `bind source path does not exist: .../telemt.toml` | конфиг был bind-mount'ом; здесь он рендерится из `.env` |
+| `cannot create config ... file is the sole supported option` | у сервиса стоит `read_only: true` — с `configs.content` нельзя |
+| `MTP_SECRET must be set in .env` | нет `.env` или в нём нет переменной |
+| клиент «Подключение…» и тишина | бэкенд не достучался до DC: смотреть `docker logs telemt`, нужен внешний IPv4 без NAT-сюрпризов |
 
 ## Откат на официальный MTProxy
 
 Вернуть в `compose.yaml` сервис `mtproxy` (`telegrammessenger/proxy:latest`,
-`network_mode`/`networks: shared-net`, `SECRET`/`TAG`/`WORKERS`), убрать `telemt`,
-затем `docker compose up -d`.
+сеть `shared-net`, `SECRET`/`WORKERS`) вместо `telemt`, затем `docker compose up -d`.
+Клиентские ссылки не меняются, пока тот же `MTP_SECRET`.
