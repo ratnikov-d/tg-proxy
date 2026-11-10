@@ -28,6 +28,8 @@ fi
 
 chmod 600 "$STATE_DIR/config.json" "$STATE_DIR/profiles.json" "$TOKEN_KEY"
 
+echo "event=connect_link url=https://t.me/webproxy?server=${PUBLIC_HOSTNAME}&secret=${MTP_SECRET}"
+
 socat TCP-LISTEN:8082,fork,bind=0.0.0.0 TCP:127.0.0.1:8080 &
 socat TCP-LISTEN:8443,fork,bind=127.0.0.1 "TCP:mtproxy:${MTPROXY_PORT}" &
 
