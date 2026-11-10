@@ -18,17 +18,22 @@ TLS-транспорт и передаёт MTProto-потоки в бэкенд.
 | `start.sh` | рендер `config.json`/`profiles.json`, socat `127.0.0.1:8443 → mtproxy:443` |
 | `Dockerfile` | образ `tproxy-web` (Go-релей + socat) |
 | `config.template.json`, `profiles.template.json` | шаблоны конфигов релея |
-| `public/index.html` | сайт-заглушка на домене |
+| `public/index.html` | сайт-заглушка на домене, заголовок — плейсхолдер `__SITE_TITLE__` |
 | `.env.example` | шаблон `.env` |
 
-## Секреты
+## Секреты и настройки
 
 Всё, что нужно хосту, — `.env` рядом с `compose.yaml`:
 
 ```
 MTP_SECRET=<32 hex>
 PUBLIC_HOSTNAME=<домен>
+SITE_TITLE=Freedom
 ```
+
+`SITE_TITLE` — заголовок сайта (`<title>` и `<h1>`), по умолчанию `Freedom`.
+`start.sh` копирует `public` в `/run/tproxy/public` и подставляет туда название:
+исходник смонтирован read-only, поэтому правка идёт в копию.
 
 Секрет нигде в git не хранится: конфиг telemt рендерится Compose из `MTP_SECRET`
 (`configs.content`), а tproxy-web получает его как переменную окружения.

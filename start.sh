@@ -3,20 +3,29 @@ set -eu
 
 : "${MTP_SECRET:?MTP_SECRET is required}"
 : "${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME is required}"
+: "${SITE_TITLE:=Freedom}"
 
 STATE_DIR=/etc/tproxy-server
 TOKEN_KEY=${STATE_DIR}/token.key
+SITE_DIR=/run/tproxy/public
 MTPROXY_PORT=443
 
 mkdir -p "$STATE_DIR"
 umask 077
 
-# tproxy-server has no env support: render both config files from the templates.
+# tproxy-server has no env support: render config files from the templates.
 sed "s|__PUBLIC_HOSTNAME__|${PUBLIC_HOSTNAME}|g" \
     /tmp/tproxy/config.template.json > "$STATE_DIR/config.json"
 
 sed "s|__MTP_SECRET__|${MTP_SECRET}|g" \
     /tmp/tproxy/profiles.template.json > "$STATE_DIR/profiles.json"
+
+# Сайт отдаётся из копии: исходник смонтирован read-only, а заголовок
+# подставляется из SITE_TITLE.
+rm -rf "$SITE_DIR"
+mkdir -p "$SITE_DIR"
+cp -a /app/public/. "$SITE_DIR"/
+sed -i "s|__SITE_TITLE__|${SITE_TITLE}|g" "$SITE_DIR/index.html"
 
 # The signing key must survive restarts: generate it once, never replace it.
 if [ -f "$TOKEN_KEY" ] && [ "$(wc -c < "$TOKEN_KEY" | tr -d ' ')" = "32" ]; then

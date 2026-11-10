@@ -46,6 +46,7 @@ services:
     environment:
       - MTP_SECRET=${MTP_SECRET:?MTP_SECRET must be set in .env}
       - PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME must be set in .env}
+      - SITE_TITLE=${SITE_TITLE:-Freedom}
     labels:
       - "traefik.enable=true"
       # --- HTTP Router для сайта-заглушки ---
