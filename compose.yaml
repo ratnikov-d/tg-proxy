@@ -2,8 +2,9 @@ networks:
   shared-net:
     external: true
 
-volumes:
-  tproxy-state:
+configs:
+  telemt_config:
+    file: ./telemt.toml
 
 services:
   tproxy-web:
@@ -29,8 +30,8 @@ services:
       - "traefik.http.routers.tproxy-web.tls.certresolver=letsencrypt"
       - "traefik.http.services.tproxy-web.loadbalancer.server.port=8082"
       - "traefik.docker.network=shared-net"
-    
-    healthcheck:  
+
+    healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8082/ || exit 1"]
       interval: 30s
       timeout: 5s
@@ -42,26 +43,44 @@ services:
         limits:
           memory: 128M
 
-  mtproxy:
-    container_name: mtproxy
-    image: telegrammessenger/proxy:latest
+  # Бэкенд — telemt (Rust) вместо официального MTProxy 0.01 (образ 2020 года).
+  # Сеть: alias `mtproxy`, чтобы start.sh в tproxy-web продолжал ходить в mtproxy:443.
+  telemt:
+    container_name: telemt
+    image: ghcr.io/telemt/telemt:3.5.17
     restart: unless-stopped
+    working_dir: /run/telemt
+    command: ["/etc/telemt/config.toml"]
+    configs:
+      - source: telemt_config
+        target: /etc/telemt/config.toml
+    tmpfs:
+      - /run/telemt:rw,mode=1777,size=8m
     networks:
-      - shared-net
-    environment:
-      # Official image variables: SECRET, TAG, WORKERS. Client port is fixed at 443.
-      - SECRET=${MTP_SECRET:?MTP_SECRET must be set in .env}
-      - TAG=${MTP_TAG:?MTP_TAG must be set in .env}
-      - WORKERS=${MTP_WORKERS:-1}
-    
+      shared-net:
+        aliases:
+          - mtproxy
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 262144
     healthcheck:
-      test: ["CMD-SHELL", "ss -lnt | grep -q ':443 '"]
+      test: ["CMD", "/app/telemt", "healthcheck", "/etc/telemt/config.toml", "--mode", "liveness"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 25s
-
+      start_period: 20s
     deploy:
       resources:
         limits:
           memory: 128M
+
+volumes:
+  tproxy-state:
