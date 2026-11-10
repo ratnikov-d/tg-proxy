@@ -85,9 +85,3 @@ docker compose up -d
 | `cannot create config ... file is the sole supported option` | у сервиса стоит `read_only: true` — с `configs.content` нельзя |
 | `MTP_SECRET must be set in .env` | нет `.env` или в нём нет переменной |
 | клиент «Подключение…» и тишина | бэкенд не достучался до DC: смотреть `docker logs telemt`, нужен внешний IPv4 без NAT-сюрпризов |
-
-## Откат на официальный MTProxy
-
-Вернуть в `compose.yaml` сервис `mtproxy` (`telegrammessenger/proxy:latest`,
-сеть `shared-net`, `SECRET`/`WORKERS`) вместо `telemt`, затем `docker compose up -d`.
-Клиентские ссылки не меняются, пока тот же `MTP_SECRET`.
