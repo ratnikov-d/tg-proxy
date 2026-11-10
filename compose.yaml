@@ -3,8 +3,33 @@ networks:
     external: true
 
 configs:
+  # Конфиг бэкенда генерируется Compose из MTP_SECRET: в репозитории секрета нет,
+  # а bind-mount файла из стека ломается при деплое из git (файла нет в репо).
   telemt_config:
-    file: ./telemt.toml
+    content: |
+      [general]
+      use_middle_proxy = true
+      log_level = "normal"
+
+      [general.modes]
+      classic = true
+      secure = false
+      tls = false
+
+      [server]
+      port = 443
+
+      [server.api]
+      enabled = true
+      listen = "127.0.0.1:9091"
+      whitelist = ["127.0.0.1/32", "::1/128"]
+
+      [censorship]
+      mask = false
+      tls_emulation = false
+
+      [access.users]
+      tproxy = "${MTP_SECRET:?MTP_SECRET must be set in .env}"
 
 services:
   tproxy-web:
@@ -50,17 +75,16 @@ services:
     image: ghcr.io/telemt/telemt:3.5.17
     restart: unless-stopped
     working_dir: /run/telemt
-    command: ["/etc/telemt/config.toml"]
     configs:
       - source: telemt_config
         target: /etc/telemt/config.toml
+    command: ["/etc/telemt/config.toml"]
     tmpfs:
       - /run/telemt:rw,mode=1777,size=8m
     networks:
       shared-net:
         aliases:
           - mtproxy
-    read_only: true
     cap_drop:
       - ALL
     cap_add:

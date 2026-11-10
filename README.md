@@ -15,7 +15,6 @@ FakeTLS/HTTPS снимает `tproxy-web`, поэтому бэкенд рабо�
 | Файл | Назначение |
 |---|---|
 | `compose.yaml` | стек: `tproxy-web` + `telemt`, сеть `shared-net` |
-| `telemt.toml.example` | конфиг бэкенда, вместо секрета плейсхолдер |
 | `start.sh` | рендер `config.json`/`profiles.json`, socat 8443 → `mtproxy:443` |
 | `public/index.html` | сайт-заглушка |
 | `Dockerfile` | сборка `tproxy-web` из telegramdesktop/tproxy-server |
@@ -28,14 +27,22 @@ FakeTLS/HTTPS снимает `tproxy-web`, поэтому бэкенд рабо�
 
 - у контейнера `telemt` network alias `mtproxy`, потому что `start.sh` жёстко
   ходит в `mtproxy:443`; отдельный контейнер `mtproxy` больше не нужен;
-- конфиг подаётся compose-`configs`, состояние — tmpfs `/run/telemt`, томов нет;
+- конфиг бэкенда рендерится самим Compose из `MTP_SECRET` (`configs.content`):
+  в git секрета нет, а bind-mount файла ломается при деплое из git на другом
+  хосте (`bind source path does not exist`); состояние — tmpfs `/run/telemt`;
 - healthcheck использует Control API `127.0.0.1:9091` внутри контейнера;
 - TLS/secure режимы выключены: FakeTLS уже делает `tproxy-web`.
 
 ## Деплой
 
+Нужен только `.env` рядом с `compose.yaml`:
+
+```
+MTP_SECRET=<32 hex>
+PUBLIC_HOSTNAME=freedom.example.com
+```
+
 ```bash
-cp telemt.toml.example telemt.toml   # вписать 32 hex секрет в [access.users]
 docker compose up -d
 ```
 
