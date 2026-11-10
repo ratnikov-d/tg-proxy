@@ -1,0 +1,6 @@
+{
+    "listen": "127.0.0.1:8080",
+    "public_dir": "/app/public",
+    "profiles_file": "/etc/tproxy-server/profiles.json",
+    "public_hostname": "__PUBLIC_HOSTNAME__"
+}

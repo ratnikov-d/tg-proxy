@@ -1,0 +1,67 @@
+networks:
+  shared-net:
+    external: true
+
+volumes:
+  tproxy-state:
+
+services:
+  tproxy-web:
+    container_name: tproxy-web
+    build: .
+    restart: unless-stopped
+    networks:
+      - shared-net
+    volumes:
+      - ./config.template.json:/tmp/tproxy/config.template.json:ro
+      - ./profiles.template.json:/tmp/tproxy/profiles.template.json:ro
+      - ./public:/app/public:ro
+      - tproxy-state:/etc/tproxy-server
+    environment:
+      - MTP_SECRET=${MTP_SECRET:?MTP_SECRET must be set in .env}
+      - PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME must be set in .env}
+    labels:
+      - "traefik.enable=true"
+      # --- HTTP Router для сайта-заглушки ---
+      - "traefik.http.routers.tproxy-web.rule=Host(`${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME must be set in .env}`)"
+      - "traefik.http.routers.tproxy-web.entrypoints=websecure"
+      - "traefik.http.routers.tproxy-web.tls=true"
+      - "traefik.http.routers.tproxy-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tproxy-web.loadbalancer.server.port=8082"
+      - "traefik.docker.network=shared-net"
+    
+    healthcheck:  
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8082/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  mtproxy:
+    container_name: mtproxy
+    image: telegrammessenger/proxy:latest
+    restart: unless-stopped
+    networks:
+      - shared-net
+    environment:
+      # Official image variables: SECRET, TAG, WORKERS. Client port is fixed at 443.
+      - SECRET=${MTP_SECRET:?MTP_SECRET must be set in .env}
+      - TAG=${MTP_TAG:?MTP_TAG must be set in .env}
+      - WORKERS=${MTP_WORKERS:-1}
+    
+    healthcheck:
+      test: ["CMD-SHELL", "ss -lnt | grep -q ':443 '"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+    deploy:
+      resources:
+        limits:
+          memory: 128M
