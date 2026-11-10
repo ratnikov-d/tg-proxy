@@ -111,4 +111,8 @@ services:
           memory: 128M
 
 volumes:
+  # Явное имя: без него Compose/Dockhand добавляет префикс проекта
+  # (<проект>_tproxy-state), и при деплое под другим именем стека данные
+  # (token.key) теряются.
   tproxy-state:
+    name: tproxy-state

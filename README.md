@@ -38,6 +38,12 @@ SITE_TITLE=Freedom
 Секрет нигде в git не хранится: конфиг telemt рендерится Compose из `MTP_SECRET`
 (`configs.content`), а tproxy-web получает его как переменную окружения.
 
+Состояние tproxy-web (`/etc/tproxy-server`: `token.key`, отрендеренные конфиги)
+лежит в томе с фиксированным именем `tproxy-state`. Имя задано явно в
+`compose.yaml` (ключ `name:`), иначе Compose/Dockhand добавляет префикс проекта
+(`<проект>_tproxy-state`), и при деплое под другим именем стека `token.key`
+теряется — все выданные сессии становятся недействительными.
+
 ## Бэкенд
 
 `ghcr.io/telemt/telemt:3.5.17` (Rust), режим `classic`, TLS/secure выключены —
