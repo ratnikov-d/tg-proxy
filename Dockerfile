@@ -12,4 +12,4 @@ COPY --from=builder /tproxy-server /usr/local/bin/tproxy-server
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
-CMD ["/start.sh"]
+CMD ["/bin/sh", "/start.sh"]

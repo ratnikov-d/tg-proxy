@@ -39,6 +39,9 @@ services:
     networks:
       - shared-net
     volumes:
+      # start.sh монтируется, а не берётся только из образа: иначе его правка
+      # не применяется при деплое из git без пересборки образа.
+      - ./start.sh:/start.sh:ro
       - ./config.template.json:/tmp/tproxy/config.template.json:ro
       - ./profiles.template.json:/tmp/tproxy/profiles.template.json:ro
       - ./public:/app/public:ro
